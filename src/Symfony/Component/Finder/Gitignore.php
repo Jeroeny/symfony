@@ -61,29 +61,32 @@ class Gitignore
             $patterns[] = $pattern;
         }
 
-        return sprintf('/^(%s)$/', implode(')|(', $patterns));
+        return sprintf('/^((%s))$/', implode(')|(', $patterns));
     }
 
     private static function getRegexFromGitignore(string $gitignorePattern, bool $negative = false): string
     {
         $regex = '';
+        $isRelativePath = false;
         // If there is a separator at the beginning or middle (or both) of the pattern, then the pattern is relative to the directory level of the particular .gitignore file itself
         $slashPosition = strpos($gitignorePattern, '/');
         if (false !== $slashPosition && strlen($gitignorePattern) - 1 !== $slashPosition) {
             if ($slashPosition === 0) {
                 $gitignorePattern = substr($gitignorePattern, 1);
             }
+
+            $isRelativePath = true;
             $regex .= '^';
         }
 
-        if ('/' === $gitignorePattern[\strlen($gitignorePattern) - 1]) {
+        if ($gitignorePattern[strlen($gitignorePattern) - 1] === '/') {
             $gitignorePattern = substr($gitignorePattern, 0, -1);
         }
 
         $iMax = \strlen($gitignorePattern);
         for ($i = 0; $i < $iMax; ++$i) {
             $tripleChars = substr($gitignorePattern, $i, 3);
-            if ('**/' === $tripleChars) {
+            if ('**/' === $tripleChars || '/**' === $tripleChars) {
                 $regex .= '.*';
                 $i += 2;
                 continue;
@@ -95,11 +98,16 @@ class Gitignore
                 ++$i;
                 continue;
             }
+            if ('*/' === $doubleChars) {
+                $regex .= '[^\/]*\/?[^\/]*';
+                ++$i;
+                continue;
+            }
 
             $c = $gitignorePattern[$i];
             switch ($c) {
                 case '*':
-                    $regex .= '[^\/\r\n]+';
+                    $regex .= $isRelativePath ? '[^\/]*' : '[^\/]*\/?[^\/]*';
                     break;
                 case '/':
                 case '.':
@@ -120,6 +128,6 @@ class Gitignore
             return sprintf('%s$|%s\/$', $regex, $regex);
         }
 
-        return '(?>' . $regex . '($|\/))';
+        return '(?>' . $regex . '($|\/.*))';
     }
 }
